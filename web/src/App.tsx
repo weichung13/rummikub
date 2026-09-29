@@ -78,13 +78,14 @@ function App() {
   const hasNewTilesOnTable = draft.flat().some((tile) => !tableTileIds.has(tile.id))
   const sortedHand = useMemo(() => {
     if (!room) return []
-    return [...room.hand].sort((left, right) => {
+    const draftTileIds = new Set(draft.flat().map((tile) => tile.id))
+    return room.hand.filter((tile) => !draftTileIds.has(tile.id)).sort((left, right) => {
       if (left.color === 'joker') return 1
       if (right.color === 'joker') return -1
       if (sortMode === 'number') return left.value - right.value || colors.indexOf(left.color) - colors.indexOf(right.color)
       return colors.indexOf(left.color) - colors.indexOf(right.color) || left.value - right.value
     })
-  }, [room, sortMode])
+  }, [draft, room, sortMode])
 
   const enterRoom = (action: 'create' | 'join') => {
     const cleanName = name.trim()
@@ -168,7 +169,7 @@ function App() {
   return (
     <main className="game-shell">
       <header className="game-header"><a className="wordmark" href="/" onClick={(event) => { event.preventDefault(); localStorage.removeItem(seatStorageKey); window.location.reload() }}><span className="brand-mark">R</span><span>RUMI CLUB</span></a><div className="room-tag"><span>ROOM</span><strong>{room.code}</strong><button aria-label="複製房間代碼" title="複製房間代碼" onClick={copyRoomCode}>{linkCopied ? '✓' : '▢'}</button></div><div className="header-right"><span className="live-dot" /><span className="header-label">PRIVATE TABLE</span><span className="player-total">{room.players.length} / 6</span></div></header>
-      <section className="players-strip" aria-label="房間玩家">{room.players.map((player, index) => <div className={`player-seat ${room.currentPlayerId === player.id && room.started && !room.finished ? 'is-active' : ''}`} key={player.id}><span className={`seat-avatar avatar-${index % 6}`}>{player.name.slice(0, 1).toUpperCase()}</span><span className="seat-info"><strong>{player.name}{player.id === playerKey ? '（你）' : ''}</strong><small>{player.isHost ? '房主' : player.connected ? '已加入' : '重新連線中'}</small></span>{room.started && <span className="tile-count">{player.count}<small>張</small></span>}</div>)}</section>
+      <section className="players-strip" aria-label="房間玩家">{room.players.map((player, index) => <div className={`player-seat ${room.currentPlayerId === player.id && room.started && !room.finished ? 'is-active' : ''}`} key={player.id}><span className={`seat-avatar avatar-${index % 6}`}>{player.name.slice(0, 1).toUpperCase()}</span><span className="seat-info"><strong>{player.name}{player.id === playerKey ? '（你）' : ''}</strong><small>{player.isHost ? '房主' : player.connected ? '已加入' : '重新連線中'}</small></span>{room.started && <span className="tile-count">{player.id === playerKey ? sortedHand.length : player.count}<small>張</small></span>}</div>)}</section>
       <section className="table-area">
         {!room.started ? <div className="waiting-state"><div className="wait-mark">✳</div><p className="eyebrow">ROOM {room.code}</p><h1>朋友，<em>就等你了。</em></h1><p className="waiting-copy">分享房間代碼，等大家用手機入座。至少 2 位玩家即可開始。</p><button className="code-share" onClick={copyRoomCode}><span>房間代碼</span><strong>{room.code}</strong><small>{linkCopied ? '已複製' : '點擊複製'}</small></button><div className="waiting-bottom"><span>{room.players.length} 位玩家已入座</span>{isHost ? <button className="primary-button" disabled={room.players.length < 2} onClick={() => socket.emit('game:start')}>開始遊戲 <span>↗</span></button> : <span>等待房主開始遊戲</span>}</div></div> : <>
           <div className="table-heading"><div><p className="eyebrow">{room.finished ? 'GAME OVER' : isMyTurn ? 'YOUR TURN' : 'TABLE IN PLAY'}</p><h1>{room.finished ? winner ? `${winner.name} 獲勝` : '平手' : isMyTurn ? '輪到你了' : turnPlayer ? `${turnPlayer.name} 的回合` : '拉密桌'}</h1></div><div className="draw-status"><span>DRAW PILE</span><strong>{room.drawCount}</strong><small>張</small></div></div>
@@ -177,7 +178,7 @@ function App() {
           {!room.finished && <div className="table-tools"><span>{room.message}</span>{isMyTurn && <div className="tool-actions"><button className="text-button" onClick={() => { setDraft(room.table); setSelected([]) }}>復原排列</button><button className="secondary-button" disabled={selected.length < 3} onClick={formMeld}>將選取牌組成一組</button><button className="primary-button" disabled={!hasNewTilesOnTable} onClick={submitTurn}>提交出牌 <span>↗</span></button><button className="draw-button" onClick={() => socket.emit('game:draw')}>{room.drawCount > 0 ? '摸一張' : '略過回合'} <span>＋</span></button></div>}</div>}
         </>}
       </section>
-      {room.started && !room.finished && <section className="hand-area"><div className="hand-heading"><div><p className="eyebrow">YOUR RACK</p><h2>{me?.count ?? 0} 張手牌</h2></div><label className="sort-control">排序 <select value={sortMode} onChange={(event) => setSortMode(event.target.value as 'color' | 'number')}><option value="color">依顏色</option><option value="number">依數字</option></select></label></div><div className="hand-rack">{sortedHand.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} onClick={() => isMyTurn && toggleTile(tile.id)} />)}</div><div className="hand-foot"><span>{isMyTurn ? '選擇手牌，也可選桌面上的牌重新組合。' : '等候其他玩家完成回合'}</span><span>{room.openedPlayers.includes(playerKey) ? '已完成首次出牌' : '首次出牌需達 30 點'}</span></div></section>}
+      {room.started && !room.finished && <section className="hand-area"><div className="hand-heading"><div><p className="eyebrow">YOUR RACK</p><h2>{sortedHand.length} 張手牌</h2></div><label className="sort-control">排序 <select value={sortMode} onChange={(event) => setSortMode(event.target.value as 'color' | 'number')}><option value="color">依顏色</option><option value="number">依數字</option></select></label></div><div className="hand-rack">{sortedHand.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} onClick={() => isMyTurn && toggleTile(tile.id)} />)}</div><div className="hand-foot"><span>{isMyTurn ? '選擇手牌，也可選桌面上的牌重新組合。' : '等候其他玩家完成回合'}</span><span>{room.openedPlayers.includes(playerKey) ? '已完成首次出牌' : '首次出牌需達 30 點'}</span></div></section>}
       {error && <div className="toast-error" role="alert"><span>{error}</span><button aria-label="關閉訊息" onClick={() => setError('')}>×</button></div>}
     </main>
   )
