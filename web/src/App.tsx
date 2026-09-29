@@ -74,6 +74,8 @@ function App() {
   const playerKey = useMemo(() => seatKey(), [])
   const me = room?.players.find((player) => player.id === playerKey)
   const isMyTurn = room?.currentPlayerId === playerKey
+  const tableTileIds = new Set(room?.table.flat().map((tile) => tile.id) ?? [])
+  const hasNewTilesOnTable = draft.flat().some((tile) => !tableTileIds.has(tile.id))
   const sortedHand = useMemo(() => {
     if (!room) return []
     return [...room.hand].sort((left, right) => {
@@ -172,7 +174,7 @@ function App() {
           <div className="table-heading"><div><p className="eyebrow">{room.finished ? 'GAME OVER' : isMyTurn ? 'YOUR TURN' : 'TABLE IN PLAY'}</p><h1>{room.finished ? winner ? `${winner.name} 獲勝` : '平手' : isMyTurn ? '輪到你了' : turnPlayer ? `${turnPlayer.name} 的回合` : '拉密桌'}</h1></div><div className="draw-status"><span>DRAW PILE</span><strong>{room.drawCount}</strong><small>張</small></div></div>
           <div className="table-surface">{draft.length === 0 ? <div className="empty-table"><span>✳</span><p>桌面還沒有牌組</p><small>選好手牌，排出第一組牌</small></div> : draft.map((meld, meldIndex) => <div className="meld" key={meldIndex}>{meld.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} onClick={() => isMyTurn && room.openedPlayers.includes(playerKey) && toggleTile(tile.id)} />)}</div>)}</div>
           {room.finished && <div className="game-result">{room.message}<button className="secondary-button" onClick={() => { localStorage.removeItem(seatStorageKey); window.location.reload() }}>返回大廳</button></div>}
-          {!room.finished && <div className="table-tools"><span>{room.message}</span>{isMyTurn && <div className="tool-actions"><button className="text-button" onClick={() => { setDraft(room.table); setSelected([]) }}>復原排列</button><button className="secondary-button" disabled={selected.length < 3} onClick={formMeld}>將選取牌組成一組</button><button className="primary-button" disabled={selected.length === 0} onClick={submitTurn}>提交出牌 <span>↗</span></button><button className="draw-button" onClick={() => socket.emit('game:draw')}>{room.drawCount > 0 ? '摸一張' : '略過回合'} <span>＋</span></button></div>}</div>}
+          {!room.finished && <div className="table-tools"><span>{room.message}</span>{isMyTurn && <div className="tool-actions"><button className="text-button" onClick={() => { setDraft(room.table); setSelected([]) }}>復原排列</button><button className="secondary-button" disabled={selected.length < 3} onClick={formMeld}>將選取牌組成一組</button><button className="primary-button" disabled={!hasNewTilesOnTable} onClick={submitTurn}>提交出牌 <span>↗</span></button><button className="draw-button" onClick={() => socket.emit('game:draw')}>{room.drawCount > 0 ? '摸一張' : '略過回合'} <span>＋</span></button></div>}</div>}
         </>}
       </section>
       {room.started && !room.finished && <section className="hand-area"><div className="hand-heading"><div><p className="eyebrow">YOUR RACK</p><h2>{me?.count ?? 0} 張手牌</h2></div><label className="sort-control">排序 <select value={sortMode} onChange={(event) => setSortMode(event.target.value as 'color' | 'number')}><option value="color">依顏色</option><option value="number">依數字</option></select></label></div><div className="hand-rack">{sortedHand.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} onClick={() => isMyTurn && toggleTile(tile.id)} />)}</div><div className="hand-foot"><span>{isMyTurn ? '選擇手牌，也可選桌面上的牌重新組合。' : '等候其他玩家完成回合'}</span><span>{room.openedPlayers.includes(playerKey) ? '已完成首次出牌' : '首次出牌需達 30 點'}</span></div></section>}
