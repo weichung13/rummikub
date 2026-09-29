@@ -28,7 +28,6 @@ export type GameView = {
   drawCount: number
   message: string
   openedPlayers: string[]
-  drawnTile: Tile | null
 }
 
 export const colors: TileColor[] = ['red', 'blue', 'yellow', 'black']

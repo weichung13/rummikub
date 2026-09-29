@@ -41,22 +41,38 @@ function App() {
       setDraft(nextRoom.table)
       setSelected([])
       setError('')
-      if (nextRoom.drawnTile) setDrawNotice(nextRoom.drawnTile)
     }
-    const onError = (message: string) => setError(message)
+    const onError = (message: string) => {
+      if (message.startsWith('伺服器已重新啟動')) {
+        const saved = localStorage.getItem(seatStorageKey)
+        if (saved) {
+          const seat = JSON.parse(saved) as SavedSeat
+          delete seat.code
+          localStorage.setItem(seatStorageKey, JSON.stringify(seat))
+        }
+        setRoom(null)
+        setDraft([])
+        setSelected([])
+        setCode('')
+      }
+      setError(message)
+    }
+    const onDrawn = (tile: Tile) => setDrawNotice(tile)
     const onConnect = () => {
       const saved = localStorage.getItem(seatStorageKey)
       if (!saved) return
       const seat = JSON.parse(saved) as SavedSeat
-      if (seat.code && seat.name) socket.emit('room:join', { code: seat.code, name: seat.name, key: seat.key })
+      if (seat.code && seat.name) socket.emit('room:join', { code: seat.code, name: seat.name, key: seat.key, reconnect: true })
     }
     socket.on('room:update', onUpdate)
     socket.on('room:error', onError)
+    socket.on('game:drawn', onDrawn)
     socket.on('connect', onConnect)
     socket.connect()
     return () => {
       socket.off('room:update', onUpdate)
       socket.off('room:error', onError)
+      socket.off('game:drawn', onDrawn)
       socket.off('connect', onConnect)
       socket.disconnect()
     }

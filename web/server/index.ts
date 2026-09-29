@@ -2,7 +2,7 @@ import express from 'express'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { Server } from 'socket.io'
-import { createDeck, isValidMeld, meldValue, type GameView, type Meld, type PlayerView, type Tile } from '../src/game.js'
+import { createDeck, isValidMeld, meldValue, orderMeld, type GameView, type Meld, type PlayerView, type Tile } from '../src/game.js'
 
 type Player = {
   id: string
@@ -10,7 +10,6 @@ type Player = {
   name: string
   socketId: string | null
   hand: Tile[]
-  drawnTile: Tile | null
 }
 
 type Room = {
@@ -68,14 +67,12 @@ function viewFor(room: Room, playerId: string): GameView {
     drawCount: room.deck.length,
     message: room.message,
     openedPlayers: [...room.openedPlayers],
-    drawnTile: viewer?.drawnTile ?? null,
   }
 }
 
 function publish(room: Room): void {
   for (const player of room.players) {
     if (player.socketId) io.to(player.socketId).emit('room:update', viewFor(room, player.id))
-    player.drawnTile = null
   }
 }
 
@@ -94,7 +91,7 @@ io.on('connection', (socket) => {
     const cleanName = name.trim().slice(0, 18)
     if (!cleanName || !key) return notify(socket.id, '請輸入暱稱。')
     const code = makeCode()
-    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [], drawnTile: null }
+    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [] }
     const room: Room = {
       code,
       hostId: player.id,
@@ -115,11 +112,11 @@ io.on('connection', (socket) => {
     publish(room)
   })
 
-  socket.on('room:join', ({ code: requestedCode, name, key }: { code: string; name: string; key: string }) => {
+  socket.on('room:join', ({ code: requestedCode, name, key, reconnect }: { code: string; name: string; key: string; reconnect?: boolean }) => {
     const code = requestedCode.trim().toUpperCase()
     const cleanName = name.trim().slice(0, 18)
     const room = rooms.get(code)
-    if (!room) return notify(socket.id, '找不到這個房間代碼。')
+    if (!room) return notify(socket.id, reconnect ? '伺服器已重新啟動，房間暫存已清除。請建立新房間。' : '找不到這個房間代碼。')
     if (!cleanName || !key) return notify(socket.id, '請輸入暱稱。')
     const returning = room.players.find((player) => player.key === key)
     if (returning) {
@@ -131,7 +128,7 @@ io.on('connection', (socket) => {
     }
     if (room.started) return notify(socket.id, '牌局已經開始，無法加入。')
     if (room.players.length >= 6) return notify(socket.id, '房間已滿，最多 6 人。')
-    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [], drawnTile: null }
+    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [] }
     room.players.push(player)
     room.message = `${cleanName} 加入房間。`
     socket.data.roomCode = code
@@ -193,7 +190,7 @@ io.on('connection', (socket) => {
       room.openedPlayers.add(player.id)
     }
 
-    room.table = canonical
+    room.table = canonical.map(orderMeld)
     player.hand = player.hand.filter((tile) => !addedIds.includes(tile.id))
     room.passCount = 0
     if (player.hand.length === 0) {
@@ -215,7 +212,7 @@ io.on('connection', (socket) => {
     if (room.deck.length > 0) {
       const drawnTile = room.deck.pop()!
       player.hand.push(drawnTile)
-      player.drawnTile = drawnTile
+      io.to(socket.id).emit('game:drawn', drawnTile)
       room.passCount = 0
       room.message = `${player.name} 摸了一張牌。`
     } else {
