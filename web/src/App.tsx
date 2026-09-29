@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
-import { colors, type GameView, type Meld, type Tile, type TileColor } from './game'
+import { colors, orderMeld, type GameView, type Meld, type Tile, type TileColor } from './game'
 import './App.css'
 
 type SavedSeat = { name: string; key: string; code?: string }
@@ -33,6 +33,7 @@ function App() {
   const [draft, setDraft] = useState<Meld[]>([])
   const [sortMode, setSortMode] = useState<'color' | 'number'>('color')
   const [linkCopied, setLinkCopied] = useState(false)
+  const [drawNotice, setDrawNotice] = useState<Tile | null>(null)
 
   useEffect(() => {
     const onUpdate = (nextRoom: GameView) => {
@@ -40,6 +41,7 @@ function App() {
       setDraft(nextRoom.table)
       setSelected([])
       setError('')
+      if (nextRoom.drawnTile) setDrawNotice(nextRoom.drawnTile)
     }
     const onError = (message: string) => setError(message)
     const onConnect = () => {
@@ -59,6 +61,12 @@ function App() {
       socket.disconnect()
     }
   }, [socket])
+
+  useEffect(() => {
+    if (!drawNotice) return
+    const timeout = window.setTimeout(() => setDrawNotice(null), 4500)
+    return () => window.clearTimeout(timeout)
+  }, [drawNotice])
 
   useEffect(() => {
     if (!room) return
@@ -111,7 +119,7 @@ function App() {
     setDraft((previous) => {
       const chosen = new Set(selected)
       const remainder = previous.map((meld) => meld.filter((tile) => !chosen.has(tile.id))).filter((meld) => meld.length > 0)
-      return [...remainder, tiles]
+      return [...remainder, orderMeld(tiles)]
     })
     setSelected([])
     setError('')
@@ -179,6 +187,7 @@ function App() {
         </>}
       </section>
       {room.started && !room.finished && <section className="hand-area"><div className="hand-heading"><div><p className="eyebrow">YOUR RACK</p><h2>{sortedHand.length} 張手牌</h2></div><label className="sort-control">排序 <select value={sortMode} onChange={(event) => setSortMode(event.target.value as 'color' | 'number')}><option value="color">依顏色</option><option value="number">依數字</option></select></label></div><div className="hand-rack">{sortedHand.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} onClick={() => isMyTurn && toggleTile(tile.id)} />)}</div><div className="hand-foot"><span>{isMyTurn ? '選擇手牌，也可選桌面上的牌重新組合。' : '等候其他玩家完成回合'}</span><span>{room.openedPlayers.includes(playerKey) ? '已完成首次出牌' : '首次出牌需達 30 點'}</span></div></section>}
+      {drawNotice && <div className="draw-notice" role="status" aria-live="polite"><span className={`drawn-tile tile-${drawNotice.color}`} aria-hidden="true"><strong>{drawNotice.color === 'joker' ? '★' : drawNotice.value}</strong><small>{drawNotice.color === 'joker' ? 'J' : '◆'}</small></span><span><small>你摸到</small><strong>{tileName(drawNotice)}</strong></span><button type="button" aria-label="關閉摸牌提示" onClick={() => setDrawNotice(null)}>×</button></div>}
       {error && <div className="toast-error" role="alert"><span>{error}</span><button aria-label="關閉訊息" onClick={() => setError('')}>×</button></div>}
     </main>
   )

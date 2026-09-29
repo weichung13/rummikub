@@ -28,6 +28,7 @@ export type GameView = {
   drawCount: number
   message: string
   openedPlayers: string[]
+  drawnTile: Tile | null
 }
 
 export const colors: TileColor[] = ['red', 'blue', 'yellow', 'black']
@@ -54,6 +55,37 @@ export function isValidMeld(meld: Meld): boolean {
     if (values.every((value) => value >= start && value <= end)) return true
   }
   return false
+}
+
+export function orderMeld(meld: Meld): Meld {
+  const numbered = meld.filter((tile) => tile.color !== 'joker')
+  const jokers = meld.filter((tile) => tile.color === 'joker')
+  const sameColor = numbered.length > 0 && numbered.every((tile) => tile.color === numbered[0].color)
+  const values = numbered.map((tile) => tile.value)
+
+  if (sameColor && new Set(values).size === values.length) {
+    let bestRun: Tile[] | null = null
+    let bestValue = -1
+    for (let start = 1; start + meld.length - 1 <= 13; start += 1) {
+      const run = Array.from({ length: meld.length }, (_, index) => start + index)
+      if (!values.every((value) => run.includes(value)) || run.length - numbered.length !== jokers.length) continue
+      let jokerIndex = 0
+      const ordered = run.map((value) => numbered.find((tile) => tile.value === value) ?? jokers[jokerIndex++])
+      const value = run.reduce((sum, number) => sum + number, 0)
+      if (value > bestValue) {
+        bestRun = ordered as Tile[]
+        bestValue = value
+      }
+    }
+    if (bestRun) return bestRun
+    return [...meld].sort((left, right) => left.value - right.value)
+  }
+
+  const sameValue = numbered.length > 0 && numbered.every((tile) => tile.value === numbered[0].value)
+  if (sameValue) {
+    return [...numbered].sort((left, right) => colors.indexOf(left.color as TileColor) - colors.indexOf(right.color as TileColor)).concat(jokers)
+  }
+  return [...meld]
 }
 
 export function meldValue(meld: Meld): number {

@@ -10,6 +10,7 @@ type Player = {
   name: string
   socketId: string | null
   hand: Tile[]
+  drawnTile: Tile | null
 }
 
 type Room = {
@@ -47,6 +48,7 @@ function makeCode(): string {
 }
 
 function viewFor(room: Room, playerId: string): GameView {
+  const viewer = room.players.find((player) => player.id === playerId)
   const players: PlayerView[] = room.players.map((player) => ({
     id: player.id,
     name: player.name,
@@ -57,7 +59,7 @@ function viewFor(room: Room, playerId: string): GameView {
   return {
     code: room.code,
     players,
-    hand: room.players.find((player) => player.id === playerId)?.hand ?? [],
+    hand: viewer?.hand ?? [],
     table: room.table,
     currentPlayerId: room.currentPlayerId,
     started: room.started,
@@ -66,12 +68,14 @@ function viewFor(room: Room, playerId: string): GameView {
     drawCount: room.deck.length,
     message: room.message,
     openedPlayers: [...room.openedPlayers],
+    drawnTile: viewer?.drawnTile ?? null,
   }
 }
 
 function publish(room: Room): void {
   for (const player of room.players) {
     if (player.socketId) io.to(player.socketId).emit('room:update', viewFor(room, player.id))
+    player.drawnTile = null
   }
 }
 
@@ -90,7 +94,7 @@ io.on('connection', (socket) => {
     const cleanName = name.trim().slice(0, 18)
     if (!cleanName || !key) return notify(socket.id, '請輸入暱稱。')
     const code = makeCode()
-    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [] }
+    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [], drawnTile: null }
     const room: Room = {
       code,
       hostId: player.id,
@@ -127,7 +131,7 @@ io.on('connection', (socket) => {
     }
     if (room.started) return notify(socket.id, '牌局已經開始，無法加入。')
     if (room.players.length >= 6) return notify(socket.id, '房間已滿，最多 6 人。')
-    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [] }
+    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [], drawnTile: null }
     room.players.push(player)
     room.message = `${cleanName} 加入房間。`
     socket.data.roomCode = code
@@ -209,7 +213,9 @@ io.on('connection', (socket) => {
     const { room, player } = current
     if (!room.started || room.finished || room.currentPlayerId !== player.id) return notify(socket.id, '現在不是你的回合。')
     if (room.deck.length > 0) {
-      player.hand.push(room.deck.pop()!)
+      const drawnTile = room.deck.pop()!
+      player.hand.push(drawnTile)
+      player.drawnTile = drawnTile
       room.passCount = 0
       room.message = `${player.name} 摸了一張牌。`
     } else {
