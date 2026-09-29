@@ -23,6 +23,7 @@ type Room = {
   finished: boolean
   winnerId: string | null
   openedPlayers: Set<string>
+  recentTableTileIds: string[]
   passCount: number
   message: string
 }
@@ -46,6 +47,10 @@ function makeCode(): string {
   return code
 }
 
+function meldSignature(meld: Meld): string {
+  return meld.map((tile) => tile.id).sort().join('|')
+}
+
 function viewFor(room: Room, playerId: string): GameView {
   const viewer = room.players.find((player) => player.id === playerId)
   const players: PlayerView[] = room.players.map((player) => ({
@@ -67,6 +72,7 @@ function viewFor(room: Room, playerId: string): GameView {
     drawCount: room.deck.length,
     message: room.message,
     openedPlayers: [...room.openedPlayers],
+    recentTableTileIds: room.recentTableTileIds,
   }
 }
 
@@ -103,6 +109,7 @@ io.on('connection', (socket) => {
       finished: false,
       winnerId: null,
       openedPlayers: new Set(),
+      recentTableTileIds: [],
       passCount: 0,
       message: '房間已建立，邀請朋友加入。',
     }
@@ -148,8 +155,10 @@ io.on('connection', (socket) => {
       for (const participant of room.players) participant.hand.push(room.deck.pop()!)
     }
     room.started = true
-    room.currentPlayerId = room.players[0].id
-    room.message = `${room.players[0].name} 先開始。`
+    const starter = room.players[Math.floor(Math.random() * room.players.length)]
+    room.currentPlayerId = starter.id
+    room.recentTableTileIds = []
+    room.message = `${starter.name} 先開始。`
     publish(room)
   })
 
@@ -190,6 +199,12 @@ io.on('connection', (socket) => {
       room.openedPlayers.add(player.id)
     }
 
+    const newMeldSignatures = new Set(canonical.map(meldSignature))
+    const movedTiles = room.table
+      .filter((meld) => !newMeldSignatures.has(meldSignature(meld)))
+      .flat()
+      .filter((tile) => newIds.includes(tile.id))
+    room.recentTableTileIds = [...new Set([...addedIds, ...movedTiles.map((tile) => tile.id)])]
     room.table = canonical.map(orderMeld)
     player.hand = player.hand.filter((tile) => !addedIds.includes(tile.id))
     room.passCount = 0
