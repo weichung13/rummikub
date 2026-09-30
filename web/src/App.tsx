@@ -32,7 +32,6 @@ function App() {
   const [selected, setSelected] = useState<string[]>([])
   const [draft, setDraft] = useState<Meld[]>([])
   const [draftHistory, setDraftHistory] = useState<Meld[][]>([])
-  const [sortMode, setSortMode] = useState<'color' | 'number'>('color')
   const [linkCopied, setLinkCopied] = useState(false)
   const [drawNotice, setDrawNotice] = useState<Tile | null>(null)
   const [recentDrawTileId, setRecentDrawTileId] = useState<string | null>(null)
@@ -110,17 +109,19 @@ function App() {
   const sortedHand = useMemo(() => {
     if (!room) return []
     const draftTileIds = new Set(draft.flat().map((tile) => tile.id))
-    return room.hand.filter((tile) => !draftTileIds.has(tile.id)).sort((left, right) => {
-      if (left.color === 'joker') return 1
-      if (right.color === 'joker') return -1
-      if (sortMode === 'number') return left.value - right.value || colors.indexOf(left.color) - colors.indexOf(right.color)
-      return colors.indexOf(left.color) - colors.indexOf(right.color) || left.value - right.value
-    })
-  }, [draft, room, sortMode])
-  const handByColor = colors.map((color) => ({
-    color,
-    tiles: sortedHand.filter((tile) => tile.color === color || (color === 'black' && tile.color === 'joker')),
-  }))
+    return room.hand
+      .filter((tile) => !draftTileIds.has(tile.id))
+      .sort((left, right) => left.value - right.value || left.id.localeCompare(right.id))
+  }, [draft, room])
+  const handRows = [
+    ...colors.map((color) => ({
+      key: color,
+      label: colorName(color),
+      color,
+      tiles: sortedHand.filter((tile) => tile.color === color),
+    })),
+    { key: 'joker', label: '鬼牌', color: 'joker' as const, tiles: sortedHand.filter((tile) => tile.color === 'joker') },
+  ].filter((row) => row.tiles.length > 0)
 
   const enterRoom = (action: 'create' | 'join') => {
     const cleanName = name.trim()
@@ -230,7 +231,7 @@ function App() {
           {!room.finished && <div className="table-tools"><span>{room.message}</span>{isMyTurn && <div className="tool-actions"><button className="text-button" disabled={draftHistory.length === 0} onClick={undoLastDraftAction}>復原上一步</button><button className="text-button" disabled={draftHistory.length === 0} onClick={resetDraft}>全部重設</button><button className="secondary-button" disabled={selected.length < 3} onClick={formMeld}>將選取牌組成一組</button><button className="primary-button" disabled={!hasNewTilesOnTable} onClick={submitTurn}>提交出牌 <span>↗</span></button><button className="draw-button" onClick={() => socket.emit('game:draw')}>{room.drawCount > 0 ? '摸一張' : '略過回合'} <span>＋</span></button></div>}</div>}
         </>}
       </section>
-      {room.started && !room.finished && <section className="hand-area"><div className="hand-heading"><div><p className="eyebrow">YOUR RACK</p><h2>{sortedHand.length} 張手牌</h2></div><label className="sort-control">排序 <select value={sortMode} onChange={(event) => setSortMode(event.target.value as 'color' | 'number')}><option value="color">依顏色</option><option value="number">依數字</option></select></label></div><div className="hand-rack">{handByColor.map(({ color, tiles }) => <div className={`hand-color-row color-row-${color}`} key={color}><span className={`rack-color-label tile-${color}`}>{colorName(color)}{color === 'black' ? '／鬼牌' : ''}</span><div className="hand-color-tiles">{tiles.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} highlighted={tile.id === recentDrawTileId} onClick={() => isMyTurn && toggleTile(tile.id)} />)}</div></div>)}</div><div className="hand-foot"><span>{isMyTurn ? '選擇手牌，也可選桌面上的牌重新組合。' : '等候其他玩家完成回合'}</span><span>{room.openedPlayers.includes(playerKey) ? '已完成首次出牌' : '首次出牌需達 30 點'}</span></div></section>}
+      {room.started && !room.finished && <section className="hand-area"><div className="hand-heading"><div><p className="eyebrow">YOUR RACK</p><h2>{sortedHand.length} 張手牌</h2></div></div><div className="hand-rack">{handRows.map(({ key, label, color, tiles }) => <div className={`hand-color-row color-row-${color}`} key={key}><span className={`rack-color-label tile-${color}`}>{label}</span><div className="hand-color-tiles">{tiles.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} highlighted={tile.id === recentDrawTileId} onClick={() => isMyTurn && toggleTile(tile.id)} />)}</div></div>)}</div><div className="hand-foot"><span>{isMyTurn ? '選擇手牌，也可選桌面上的牌重新組合。' : '等候其他玩家完成回合'}</span><span>{room.openedPlayers.includes(playerKey) ? '已完成首次出牌' : '首次出牌需達 30 點'}</span></div></section>}
       {drawNotice && <div className="draw-notice" role="status" aria-live="polite"><span className={`drawn-tile tile-${drawNotice.color}`} aria-hidden="true"><strong>{drawNotice.color === 'joker' ? '★' : drawNotice.value}</strong><small>{drawNotice.color === 'joker' ? 'J' : '◆'}</small></span><span><small>你摸到</small><strong>{tileName(drawNotice)}</strong></span><button type="button" aria-label="關閉摸牌提示" onClick={() => setDrawNotice(null)}>×</button></div>}
       {error && <div className="toast-error" role="alert"><span>{error}</span><button aria-label="關閉訊息" onClick={() => setError('')}>×</button></div>}
     </main>
