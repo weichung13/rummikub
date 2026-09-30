@@ -17,6 +17,7 @@ export type PlayerView = {
 }
 
 export type GameView = {
+  revision: number
   code: string
   players: PlayerView[]
   hand: Tile[]
@@ -89,6 +90,7 @@ export function orderMeld(meld: Meld): Meld {
 }
 
 export function meldValue(meld: Meld): number {
+  if (!isValidMeld(meld)) return 0
   const numbered = meld.filter((tile) => tile.color !== 'joker')
   const sameValue = numbered.every((tile) => tile.value === numbered[0]?.value)
   if (sameValue) return meld.length * numbered[0].value

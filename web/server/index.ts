@@ -1,8 +1,11 @@
+import { randomUUID, randomBytes } from 'node:crypto'
+import { validateTurn } from './turn.js'
+import { validEntry, validSubmission } from './validation.js'
 import express from 'express'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { Server } from 'socket.io'
-import { createDeck, isValidMeld, meldValue, orderMeld, type GameView, type Meld, type PlayerView, type Tile } from '../src/game.js'
+import { createDeck, orderMeld, type GameView, type Meld, type PlayerView, type Tile } from '../src/game.js'
 
 type Player = {
   id: string
@@ -14,6 +17,7 @@ type Player = {
 
 type Room = {
   code: string
+  revision: number
   hostId: string
   players: Player[]
   table: Meld[]
@@ -62,6 +66,7 @@ function viewFor(room: Room, playerId: string): GameView {
   }))
   return {
     code: room.code,
+    revision: room.revision,
     players,
     hand: viewer?.hand ?? [],
     table: room.table,
@@ -86,20 +91,25 @@ function notify(socketId: string, message: string): void {
   io.to(socketId).emit('room:error', message)
 }
 
-function currentRoom(socket: { data: { roomCode?: string; playerId?: string } }): { room: Room; player: Player } | null {
+function currentRoom(socket: { id: string; data: { roomCode?: string; playerId?: string } }): { room: Room; player: Player } | null {
   const room = socket.data.roomCode ? rooms.get(socket.data.roomCode) : undefined
   const player = room?.players.find((candidate) => candidate.id === socket.data.playerId)
-  return room && player ? { room, player } : null
+  return room && player && player.socketId === socket.id ? { room, player } : null
 }
 
 io.on('connection', (socket) => {
-  socket.on('room:create', ({ name, key }: { name: string; key: string }) => {
+  socket.on('room:create', (input: unknown) => {
+    if (!validEntry(input, false)) return notify(socket.id, '房間資料格式不正確。')
+    if (currentRoom(socket)) return notify(socket.id, '你已經在房間內。')
+    const { name } = input
+    const key = randomBytes(32).toString('hex')
     const cleanName = name.trim().slice(0, 18)
-    if (!cleanName || !key) return notify(socket.id, '請輸入暱稱。')
+    if (!cleanName) return notify(socket.id, '請輸入暱稱。')
     const code = makeCode()
-    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [] }
+    const player: Player = { id: randomUUID(), key, name: cleanName, socketId: socket.id, hand: [] }
     const room: Room = {
       code,
+      revision: 0,
       hostId: player.id,
       players: [player],
       table: [],
@@ -116,26 +126,41 @@ io.on('connection', (socket) => {
     rooms.set(code, room)
     socket.data.roomCode = code
     socket.data.playerId = player.id
+    socket.emit('room:seat', { playerId: player.id, token: key, code, name: cleanName })
     publish(room)
   })
 
-  socket.on('room:join', ({ code: requestedCode, name, key, reconnect }: { code: string; name: string; key: string; reconnect?: boolean }) => {
-    const code = requestedCode.trim().toUpperCase()
+  socket.on('room:join', (input: unknown) => {
+    if (!validEntry(input, true)) return notify(socket.id, '房間資料格式不正確。')
+    const { code: requestedCode, name, token, reconnect } = input
+    const code = requestedCode!.trim().toUpperCase()
     const cleanName = name.trim().slice(0, 18)
     const room = rooms.get(code)
     if (!room) return notify(socket.id, reconnect ? '伺服器已重新啟動，房間暫存已清除。請建立新房間。' : '找不到這個房間代碼。')
-    if (!cleanName || !key) return notify(socket.id, '請輸入暱稱。')
-    const returning = room.players.find((player) => player.key === key)
+    if (!cleanName) return notify(socket.id, '請輸入暱稱。')
+    const existing = currentRoom(socket)
+    if (existing && existing.room.code !== code) return notify(socket.id, '你已經在其他房間內。')
+    const returning = room.players.find((player) => player.key === token)
     if (returning) {
+      const previousSocket = returning.socketId
       returning.socketId = socket.id
+      if (previousSocket && previousSocket !== socket.id) {
+        io.sockets.sockets.get(previousSocket)?.disconnect(true)
+      }
       socket.data.roomCode = code
       socket.data.playerId = returning.id
+      room.message = `${returning.name} 已重新連線。`
+      socket.emit('room:seat', { playerId: returning.id, token: returning.key, code, name: returning.name })
       publish(room)
       return
     }
+    if (token || reconnect) return notify(socket.id, '重連憑證無效，請重新加入房間。')
+    if (currentRoom(socket)) return notify(socket.id, '你已經在房間內。')
     if (room.started) return notify(socket.id, '牌局已經開始，無法加入。')
     if (room.players.length >= 6) return notify(socket.id, '房間已滿，最多 6 人。')
-    const player: Player = { id: key, key, name: cleanName, socketId: socket.id, hand: [] }
+    const key = randomBytes(32).toString('hex')
+    const player: Player = { id: randomUUID(), key, name: cleanName, socketId: socket.id, hand: [] }
+    socket.emit('room:seat', { playerId: player.id, token: key, code, name: cleanName })
     room.players.push(player)
     room.message = `${cleanName} 加入房間。`
     socket.data.roomCode = code
@@ -154,6 +179,7 @@ io.on('connection', (socket) => {
     for (let count = 0; count < 14; count += 1) {
       for (const participant of room.players) participant.hand.push(room.deck.pop()!)
     }
+    room.revision += 1
     room.started = true
     const starter = room.players[Math.floor(Math.random() * room.players.length)]
     room.currentPlayerId = starter.id
@@ -162,42 +188,19 @@ io.on('connection', (socket) => {
     publish(room)
   })
 
-  socket.on('game:play', (submitted: Meld[][]) => {
+  socket.on('game:play', (submitted: unknown) => {
     const current = currentRoom(socket)
     if (!current) return
     const { room, player } = current
     if (!room.started || room.finished || room.currentPlayerId !== player.id) return notify(socket.id, '現在不是你的回合。')
-    if (!Array.isArray(submitted) || submitted.some((meld) => !Array.isArray(meld))) {
+    if (!validSubmission(submitted)) {
       return notify(socket.id, '桌面有不合法的牌組，請檢查順子或同數字組。')
     }
 
-    const oldIds = room.table.flat().map((tile) => tile.id)
-    const knownTiles = new Map([...room.table.flat(), ...player.hand].map((tile) => [tile.id, tile]))
-    const candidate = submitted.map((meld) => meld.map((tile) => knownTiles.get(tile.id)))
-    if (candidate.flat().some((tile) => !tile) || candidate.some((meld) => !isValidMeld(meld as Tile[]))) {
-      return notify(socket.id, '桌面有不合法的牌組，請檢查順子或同數字組。')
-    }
-    const canonical = candidate as Meld[]
-    const newIds = canonical.flat().map((tile) => tile.id)
-    if (new Set(newIds).size !== newIds.length || oldIds.some((id) => !newIds.includes(id))) {
-      return notify(socket.id, '桌面原有的牌必須全部留在合法牌組中。')
-    }
-    const handIds = new Set(player.hand.map((tile) => tile.id))
-    const addedIds = newIds.filter((id) => !oldIds.includes(id))
-    if (addedIds.length === 0 || addedIds.some((id) => !handIds.has(id))) {
-      return notify(socket.id, '請在桌面牌組中使用至少一張自己的手牌。')
-    }
-    if (!room.openedPlayers.has(player.id)) {
-      const previousMelds = room.table.map((meld) => meld.map((tile) => tile.id).sort().join('|'))
-      const unchanged = previousMelds.every((ids) => canonical.some((meld) => meld.map((tile) => tile.id).sort().join('|') === ids))
-      const newMelds = canonical.filter((meld) => !previousMelds.includes(meld.map((tile) => tile.id).sort().join('|')))
-      if (!unchanged || newMelds.some((meld) => meld.some((tile) => !handIds.has(tile.id)))) {
-        return notify(socket.id, '完成首次出牌前，不能重組桌面上其他玩家的牌組。')
-      }
-      const total = newMelds.reduce((sum, meld) => sum + meldValue(meld), 0)
-      if (total < 30) return notify(socket.id, `首次出牌需要至少 30 點，目前是 ${total} 點。`)
-      room.openedPlayers.add(player.id)
-    }
+    const result = validateTurn(room.table, player.hand, room.openedPlayers.has(player.id), submitted)
+    if ('error' in result) return notify(socket.id, result.error)
+    const { canonical, addedIds, newIds } = result
+    room.openedPlayers.add(player.id)
 
     const newMeldSignatures = new Set(canonical.map(meldSignature))
     const movedTiles = room.table
@@ -205,6 +208,7 @@ io.on('connection', (socket) => {
       .flat()
       .filter((tile) => newIds.includes(tile.id))
     room.recentTableTileIds = [...new Set([...addedIds, ...movedTiles.map((tile) => tile.id)])]
+    room.revision += 1
     room.table = canonical.map(orderMeld)
     player.hand = player.hand.filter((tile) => !addedIds.includes(tile.id))
     room.passCount = 0
@@ -224,6 +228,7 @@ io.on('connection', (socket) => {
     if (!current) return
     const { room, player } = current
     if (!room.started || room.finished || room.currentPlayerId !== player.id) return notify(socket.id, '現在不是你的回合。')
+    room.revision += 1
     if (room.deck.length > 0) {
       const drawnTile = room.deck.pop()!
       player.hand.push(drawnTile)
@@ -258,4 +263,4 @@ function advance(room: Room): void {
 }
 
 const port = Number(process.env.PORT ?? 3001)
-server.listen(port, () => console.log(`Rummikub server listening on ${port}`))
+server.listen(port, () => console.log(`Rummikub server listening on ${(server.address() as { port: number }).port}`))
