@@ -263,8 +263,8 @@ function App() {
   )
 }
 
-function TileButton({ tile, selected, dataTileId, drawArriving = false, onClick }: { tile: Tile; selected: boolean; dataTileId?: string; drawArriving?: boolean; onClick: () => void }) {
-  return <button type="button" className={`tile tile-${tile.color} ${selected ? 'is-selected' : ''} ${drawArriving ? 'is-draw-arriving' : ''}`} data-tile-id={dataTileId} aria-label={tileName(tile)} aria-pressed={selected} onClick={onClick}><span>{tile.color === 'joker' ? '★' : tile.value}</span><small>{tile.color === 'joker' ? 'J' : '◆'}</small></button>
+function TileButton({ tile, selected, highlighted = false, dataTileId, drawArriving = false, onClick }: { tile: Tile; selected: boolean; highlighted?: boolean; dataTileId?: string; drawArriving?: boolean; onClick: () => void }) {
+  return <button type="button" className={`tile tile-${tile.color} ${selected ? 'is-selected' : ''} ${highlighted ? 'is-recent' : ''} ${drawArriving ? 'is-draw-arriving' : ''}`} data-tile-id={dataTileId} aria-label={tileName(tile)} aria-pressed={selected} onClick={onClick}><span>{tile.color === 'joker' ? '★' : tile.value}</span><small>{tile.color === 'joker' ? 'J' : '◆'}</small></button>
 }
 
 export default App
