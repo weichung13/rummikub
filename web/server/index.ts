@@ -156,7 +156,7 @@ io.on('connection', (socket) => {
     }
     if (token || reconnect) return notify(socket.id, '重連憑證無效，請重新加入房間。')
     if (currentRoom(socket)) return notify(socket.id, '你已經在房間內。')
-    if (room.started) return notify(socket.id, '牌局已經開始，無法加入。')
+    if (room.started && !room.finished) return notify(socket.id, '牌局已經開始，無法加入。')
     if (room.players.length >= 6) return notify(socket.id, '房間已滿，最多 6 人。')
     const key = randomBytes(32).toString('hex')
     const player: Player = { id: randomUUID(), key, name: cleanName, socketId: socket.id, hand: [] }
@@ -168,12 +168,47 @@ io.on('connection', (socket) => {
     publish(room)
   })
 
+  socket.on('room:leave', () => {
+    const current = currentRoom(socket)
+    if (current) {
+      const { room, player } = current
+      room.players = room.players.filter(candidate => candidate.id !== player.id)
+      room.openedPlayers.delete(player.id)
+      if (room.players.length === 0) {
+        rooms.delete(room.code)
+      } else {
+        if (room.hostId === player.id) room.hostId = (room.players.find(candidate => candidate.socketId) ?? room.players[0]).id
+        if (room.started && !room.finished) {
+          room.finished = true
+          room.currentPlayerId = null
+          room.winnerId = null
+          room.revision += 1
+          room.message = `${player.name} 離開房間，本局結束。`
+        } else if (!room.finished) {
+          room.message = `${player.name} 離開房間。`
+        }
+        publish(room)
+      }
+    }
+    delete socket.data.roomCode
+    delete socket.data.playerId
+    socket.emit('room:left')
+  })
+
   socket.on('game:start', () => {
     const current = currentRoom(socket)
     if (!current) return
     const { room, player } = current
     if (player.id !== room.hostId) return notify(socket.id, '只有房主可以開始遊戲。')
-    if (room.started || room.players.length < 2) return notify(socket.id, '至少需要 2 位玩家才能開始。')
+    if (room.started && !room.finished) return notify(socket.id, '牌局正在進行中。')
+    if (room.players.length < 2) return notify(socket.id, '至少需要 2 位玩家才能開始。')
+    if (room.players.some(participant => !participant.socketId)) return notify(socket.id, '請等待所有玩家重新連線後再開始。')
+    room.table = []
+    room.finished = false
+    room.winnerId = null
+    room.openedPlayers.clear()
+    room.passCount = 0
+    for (const participant of room.players) participant.hand = []
     const copies = room.players.length <= 4 ? 2 : 3
     room.deck = createDeck(copies)
     for (let count = 0; count < 14; count += 1) {

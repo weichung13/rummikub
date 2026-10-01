@@ -153,3 +153,39 @@
   .hand-foot { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .tile.is-recent, .meld { animation: none; } }
+
+.entry-choices { display: grid; gap: 12px; }
+.entry-choice { display: grid; gap: 8px; padding: 20px; border: 1px solid #b9c6ad; border-radius: 6px; text-align: left; background: #fffefa; color: var(--green); cursor: pointer; }
+.entry-choice:hover { background: #eef2e5; }
+.entry-choice strong { font-size: 16px; }
+.entry-choice span, .entry-step { font-size: 13px; color: #687461; line-height: 1.6; }
+.entry-back { min-height: 44px; padding: 0; border: 0; background: transparent; color: #526a43; cursor: pointer; }
+.entry-title { margin: 8px 0; font-size: 23px; color: var(--green); }
+.entry-form form label { margin-top: 16px; }
+.leave-button { min-height: 44px; padding: 0 10px; border: 1px solid #c3c8b8; border-radius: 4px; background: transparent; color: #526347; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.leave-button:disabled { opacity: .45; cursor: not-allowed; }
+.leave-dialog { width: min(420px, calc(100vw - 32px)); padding: 24px; border: 1px solid #c3c8b8; border-radius: 10px; color: var(--ink); background: var(--paper); }
+.leave-dialog::backdrop { background: #102b2266; }
+.leave-dialog h2 { margin-top: 0; font-size: 22px; }
+.leave-dialog p { font-size: 14px; line-height: 1.7; }
+.leave-dialog > div { display: flex; justify-content: flex-end; gap: 12px; }
+@media (max-width: 760px) {
+  .game-header { flex-wrap: wrap; padding: 8px 0; gap: 8px; }
+  .game-header .header-right { width: 100%; justify-content: flex-end; }
+  .game-header .header-right .live-dot { margin-left: auto; }
+}
+
+.turn-announcer { position: fixed; z-index: 60; top: calc(16px + env(safe-area-inset-top)); left: 50%; width: min(420px, calc(100% - 24px)); transform: translateX(-50%); pointer-events: none; }
+.turn-notice { display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #d2e75a; border-radius: 12px; background: #eff6cf; color: #193e2b; box-shadow: 0 8px 32px #102b2240; animation: turn-arrive .3s ease-out; }
+.turn-notice-icon { font-size: 30px; }
+.turn-notice > div { display: grid; gap: 5px; }
+.turn-notice strong { font-size: 21px; }
+.turn-notice span:not(.turn-notice-icon) { font-size: 12px; }
+.turn-notice button { pointer-events: auto; margin-left: auto; min-width: 44px; min-height: 44px; border: 0; background: transparent; color: #193e2b; font-size: 24px; cursor: pointer; }
+.action-dock.is-your-turn { border-top: 3px solid #86a833; background: #f5f8e9; }
+.your-turn-badge { padding: 5px 9px; border-radius: 4px; background: #284f36; color: #edfaad; white-space: nowrap; }
+@keyframes turn-arrive { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .turn-notice { animation: none; } }
+.rematch-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
+.game-result .rematch-actions button { margin: 0; }
+.game-result > p { line-height: 1.6; }

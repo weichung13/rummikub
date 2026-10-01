@@ -42,12 +42,77 @@ test('private seats, malformed messages, reconnects and revisions', { timeout: 2
     const malformed = event<string>(active, 'room:error'); active.emit('game:play', [[null]]); assert.match(await malformed, /不合法/)
     const unknown = event<string>(active, 'room:error'); active.emit('game:play', [[{ id: 'fake1' }, { id: 'fake2' }, { id: 'fake3' }]]); assert.match(await unknown, /不合法/)
     const replacement = await connect(); const replaced = event(first, 'disconnect'); const restored = event<GameView>(replacement, 'room:update')
+    const observerRestored = event<GameView>(second, 'room:update')
     replacement.emit('room:join', { name: seat.name, code: seat.code, token: seat.token, reconnect: true })
-    const restoredView = await restored; await replaced
+    const restoredView = await restored; await replaced; await observerRestored
     assert.equal(restoredView.revision, v1.revision)
     assert.deepEqual(restoredView.hand, v1.hand)
     assert.equal(restoredView.players.find(p => p.id === seat.playerId)?.connected, true)
     const current = v1.currentPlayerId === seat.playerId ? replacement : second
-    const drawn = event<GameView>(current, 'room:update'); current.emit('game:draw'); assert.equal((await drawn).revision, 2)
+    const drawn = event<GameView>(replacement, 'room:update')
+    const otherDrawn = event<GameView>(second, 'room:update')
+    current.emit('game:draw')
+    const [afterDraw] = await Promise.all([drawn, otherDrawn])
+    assert.equal(afterDraw.revision, 2)
+    // Exhaust the deck and pass a full round to finish without depending on random hands.
+    let round: GameView = afterDraw
+    for (let turn = 0; turn < 110 && !round.finished; turn += 1) {
+      const actor = round.currentPlayerId === seat.playerId ? replacement : second
+      const update1 = event<GameView>(replacement, 'room:update')
+      const update2 = event<GameView>(second, 'room:update')
+      actor.emit('game:draw')
+      ;[round] = await Promise.all([update1, update2])
+    }
+    assert.equal(round.finished, true)
+    const deniedRematch = event<string>(second, 'room:error')
+    second.emit('game:start'); assert.match(await deniedRematch, /房主/)
+    const restart1 = event<GameView>(replacement, 'room:update')
+    const restart2 = event<GameView>(second, 'room:update')
+    replacement.emit('game:start')
+    const [fresh, fresh2] = await Promise.all([restart1, restart2])
+    assert.equal(fresh.code, seat.code)
+    assert.equal(fresh.finished, false)
+    assert.equal(fresh.winnerId, null)
+    assert.equal(fresh.hand.length, 14)
+    assert.equal(fresh2.hand.length, 14)
+    assert.equal(fresh.drawCount, 78)
+    assert.deepEqual(fresh.table, [])
+    assert.deepEqual(fresh.openedPlayers, [])
+    assert.deepEqual(fresh.recentTableTileIds, [])
+    assert.equal(fresh.revision, round.revision + 1)
+    assert.ok(fresh.players.some(player => player.id === fresh.currentPlayerId))
+    const duplicateStart = event<string>(replacement, 'room:error')
+    replacement.emit('game:start'); assert.match(await duplicateStart, /進行中/)
+    const left = event(replacement, 'room:left')
+    const ended = event<GameView>(second, 'room:update')
+    replacement.emit('room:leave')
+    await left
+    const endedView = await ended
+    assert.equal(endedView.finished, true)
+    assert.equal(endedView.currentPlayerId, null)
+    assert.equal(endedView.players.length, 1)
+    assert.equal(endedView.players[0].isHost, true)
+    const stale = event<string>(replacement, 'room:error')
+    replacement.emit('room:join', { ...seat, token: seat.token, reconnect: true })
+    assert.match(await stale, /憑證無效/)
+    const lastLeft = event(second, 'room:left'); second.emit('room:leave'); await lastLeft
+    const missing = event<string>(replacement, 'room:error')
+    replacement.emit('room:join', { name: '甲', code: seat.code })
+    assert.match(await missing, /找不到/)
+    const newSeat = event<Seat>(replacement, 'room:seat')
+    replacement.emit('room:create', { name: '新房主' })
+    const lobby = await newSeat
+    const guestJoined = event<Seat>(second, 'room:seat')
+    const guestView = event<GameView>(second, 'room:update')
+    second.emit('room:join', { name: '新朋友', code: lobby.code }); await guestJoined; await guestView
+    const hostLeft = event(replacement, 'room:left')
+    const transferred = event<GameView>(second, 'room:update')
+    replacement.emit('room:leave'); await hostLeft
+    const remaining = await transferred
+    assert.equal(remaining.started, false)
+    assert.equal(remaining.players.length, 1)
+    assert.equal(remaining.players[0].isHost, true)
+    const lobbyRejoin = event<Seat>(replacement, 'room:seat')
+    replacement.emit('room:join', { name: '回來了', code: lobby.code }); await lobbyRejoin
   } finally { clients.forEach(client => client.disconnect()); child.kill() }
 })
