@@ -17,6 +17,9 @@ export type PlayerView = {
 }
 
 export type GameView = {
+  timerEnabled: boolean
+  turnDeadline: number | null
+  serverNow: number
   revision: number
   code: string
   players: PlayerView[]

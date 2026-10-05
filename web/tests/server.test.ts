@@ -26,7 +26,7 @@ test('private seats, malformed messages, reconnects and revisions', { timeout: 2
       const error = event<string>(first, 'room:error'); first.emit('room:create', payload); assert.match(await error, /格式/)
     }
     const seatEvent = event<Seat>(first, 'room:seat'); const initial = event<GameView>(first, 'room:update')
-    first.emit('room:create', { name: '甲' }); const seat = await seatEvent; await initial
+    first.emit('room:create', { name: '甲', timerEnabled: true }); const seat = await seatEvent; await initial
     assert.notEqual(seat.playerId, seat.token)
     const second = await connect()
     const denial = event<string>(second, 'room:error')
@@ -45,6 +45,8 @@ test('private seats, malformed messages, reconnects and revisions', { timeout: 2
     const observerRestored = event<GameView>(second, 'room:update')
     replacement.emit('room:join', { name: seat.name, code: seat.code, token: seat.token, reconnect: true })
     const restoredView = await restored; await replaced; await observerRestored
+    assert.equal(restoredView.turnDeadline, v1.turnDeadline)
+    assert.equal(restoredView.timerEnabled, true)
     assert.equal(restoredView.revision, v1.revision)
     assert.deepEqual(restoredView.hand, v1.hand)
     assert.equal(restoredView.players.find(p => p.id === seat.playerId)?.connected, true)
@@ -88,6 +90,7 @@ test('private seats, malformed messages, reconnects and revisions', { timeout: 2
     replacement.emit('room:leave')
     await left
     const endedView = await ended
+    assert.equal(endedView.turnDeadline, null)
     assert.equal(endedView.finished, true)
     assert.equal(endedView.currentPlayerId, null)
     assert.equal(endedView.players.length, 1)
@@ -109,6 +112,8 @@ test('private seats, malformed messages, reconnects and revisions', { timeout: 2
     const transferred = event<GameView>(second, 'room:update')
     replacement.emit('room:leave'); await hostLeft
     const remaining = await transferred
+    assert.equal(remaining.timerEnabled, false)
+    assert.equal(remaining.turnDeadline, null)
     assert.equal(remaining.started, false)
     assert.equal(remaining.players.length, 1)
     assert.equal(remaining.players[0].isHost, true)

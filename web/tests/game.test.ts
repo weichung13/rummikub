@@ -25,6 +25,8 @@ test('runs, groups, jokers and opening points', () => {
 })
 test('untrusted payload validation rejects malformed and oversized requests', () => {
   for (const value of [null, [], {}, { name: 1 }, { name: 'a'.repeat(19) }]) assert.equal(validEntry(value, false), false)
+  assert.ok(validEntry({ name: '小明', timerEnabled: true }, false))
+  assert.equal(validEntry({ name: '小明', timerEnabled: 'true' }, false), false)
   assert.ok(validEntry({ name: '小明', code: 'ABCDE' }, true))
   assert.equal(validEntry({ name: '小明', code: 'ABCDE', token: 'public-player-id' }, true), false)
   for (const value of [null, {}, [[null]], [[1]], [Array(14).fill({ id: 'x' })], Array(54).fill([{ id: 'x' }, { id: 'y' }, { id: 'z' }])]) assert.equal(validSubmission(value), false)

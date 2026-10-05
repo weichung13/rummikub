@@ -1,10 +1,11 @@
-type Entry = { name: string; code?: string; token?: string; reconnect?: boolean }
+type Entry = { timerEnabled?: boolean; name: string; code?: string; token?: string; reconnect?: boolean }
 export function validEntry(value: unknown, joining: boolean): value is Entry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const entry = value as Record<string, unknown>
   return typeof entry.name === 'string' && entry.name.trim().length > 0 && entry.name.length <= 18
     && (!joining || (typeof entry.code === 'string' && /^[A-Z2-9]{5}$/i.test(entry.code)))
     && (entry.token === undefined || (typeof entry.token === 'string' && /^[a-f0-9]{64}$/.test(entry.token)))
+    && (entry.timerEnabled === undefined || typeof entry.timerEnabled === 'boolean')
     && (entry.reconnect === undefined || typeof entry.reconnect === 'boolean')
 }
 export function validSubmission(value: unknown): value is { id: string }[][] {

@@ -1,0 +1,17 @@
+.turn-hourglass { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: 1px solid #ffffff40; border-radius: 8px; color: #ecf4cf; background: #143d30; }
+.turn-hourglass svg { width: 35px; height: 49px; flex: none; }
+.turn-hourglass > div { display: grid; gap: 3px; }
+.turn-hourglass span, .turn-hourglass small { font-size: 10px; }
+.turn-hourglass strong { font: 600 24px var(--mono); font-variant-numeric: tabular-nums; }
+.hourglass-sand { fill: #e6c46d; }
+.sand-stream { stroke: #e6c46d; stroke-width: 2; stroke-dasharray: 3 3; animation: sand-fall .6s linear infinite; }
+.hourglass-glass { fill: none; stroke: #d6e6c1; stroke-width: 2; }
+.hourglass-frame { fill: none; stroke: #e6c46d; stroke-width: 5; stroke-linecap: round; }
+.turn-hourglass.is-urgent { border-color: #f3b084; color: #ffd7b9; }
+.table-heading { flex-wrap: wrap; }
+.timer-setting { display: flex; align-items: center; gap: 10px; padding: 12px; background: #edf1e3; border-radius: 5px; }
+.entry-form .timer-setting input { width: 20px; height: 20px; min-height: 20px; flex: none; accent-color: #31543b; }
+.timer-setting span { display: grid; gap: 5px; }
+.timer-setting small { font-size: 11px; font-weight: 400; line-height: 1.5; }
+@keyframes sand-fall { to { stroke-dashoffset: -6; } }
+@media (prefers-reduced-motion: reduce) { .sand-stream { animation: none; } }

@@ -1,3 +1,4 @@
+import { TurnClock } from './turn-clock.js'
 import { randomUUID, randomBytes } from 'node:crypto'
 import { validateTurn } from './turn.js'
 import { validEntry, validSubmission } from './validation.js'
@@ -16,6 +17,8 @@ type Player = {
 }
 
 type Room = {
+  timerEnabled: boolean
+  turnDeadline: number | null
   code: string
   revision: number
   hostId: string
@@ -36,6 +39,10 @@ const app = express()
 const server = createServer(app)
 const io = new Server(server, { cors: { origin: '*' } })
 const rooms = new Map<string, Room>()
+const turnClock = new TurnClock<Room>((room) => {
+  const player = room.players.find(candidate => candidate.id === room.currentPlayerId)
+  if (player) drawAndAdvance(room, player, true)
+})
 const clientDirectory = fileURLToPath(new URL('../dist', import.meta.url))
 
 app.get('/healthz', (_request, response) => response.sendStatus(200))
@@ -65,6 +72,9 @@ function viewFor(room: Room, playerId: string): GameView {
     connected: player.socketId !== null,
   }))
   return {
+    timerEnabled: room.timerEnabled,
+    turnDeadline: room.turnDeadline,
+    serverNow: Date.now(),
     code: room.code,
     revision: room.revision,
     players,
@@ -109,6 +119,8 @@ io.on('connection', (socket) => {
     const player: Player = { id: randomUUID(), key, name: cleanName, socketId: socket.id, hand: [] }
     const room: Room = {
       code,
+      timerEnabled: input.timerEnabled ?? false,
+      turnDeadline: null,
       revision: 0,
       hostId: player.id,
       players: [player],
@@ -175,10 +187,12 @@ io.on('connection', (socket) => {
       room.players = room.players.filter(candidate => candidate.id !== player.id)
       room.openedPlayers.delete(player.id)
       if (room.players.length === 0) {
+        turnClock.stop(room)
         rooms.delete(room.code)
       } else {
         if (room.hostId === player.id) room.hostId = (room.players.find(candidate => candidate.socketId) ?? room.players[0]).id
         if (room.started && !room.finished) {
+          turnClock.stop(room)
           room.finished = true
           room.currentPlayerId = null
           room.winnerId = null
@@ -219,6 +233,7 @@ io.on('connection', (socket) => {
     const starter = room.players[Math.floor(Math.random() * room.players.length)]
     room.currentPlayerId = starter.id
     room.recentTableTileIds = []
+    turnClock.start(room)
     room.message = `${starter.name} 先開始。`
     publish(room)
   })
@@ -227,6 +242,7 @@ io.on('connection', (socket) => {
     const current = currentRoom(socket)
     if (!current) return
     const { room, player } = current
+    if (turnClock.expireIfDue(room)) return notify(socket.id, '時間到，已自動摸牌或略過回合。')
     if (!room.started || room.finished || room.currentPlayerId !== player.id) return notify(socket.id, '現在不是你的回合。')
     if (!validSubmission(submitted)) {
       return notify(socket.id, '桌面有不合法的牌組，請檢查順子或同數字組。')
@@ -248,6 +264,7 @@ io.on('connection', (socket) => {
     player.hand = player.hand.filter((tile) => !addedIds.includes(tile.id))
     room.passCount = 0
     if (player.hand.length === 0) {
+      turnClock.stop(room)
       room.finished = true
       room.winnerId = player.id
       room.message = `${player.name} 出完手牌，獲勝！`
@@ -262,25 +279,9 @@ io.on('connection', (socket) => {
     const current = currentRoom(socket)
     if (!current) return
     const { room, player } = current
+    if (turnClock.expireIfDue(room)) return notify(socket.id, '時間到，已自動摸牌或略過回合。')
     if (!room.started || room.finished || room.currentPlayerId !== player.id) return notify(socket.id, '現在不是你的回合。')
-    room.revision += 1
-    if (room.deck.length > 0) {
-      const drawnTile = room.deck.pop()!
-      player.hand.push(drawnTile)
-      io.to(socket.id).emit('game:drawn', drawnTile)
-      room.passCount = 0
-      room.message = `${player.name} 摸了一張牌。`
-    } else {
-      room.passCount += 1
-      if (room.passCount >= room.players.length) {
-        room.finished = true
-        room.message = '牌堆已空且全體一輪無法出牌，平手。'
-      } else {
-        room.message = `${player.name} 無法出牌，略過回合。`
-      }
-    }
-    if (!room.finished) advance(room)
-    publish(room)
+    drawAndAdvance(room, player, false)
   })
 
   socket.on('disconnect', () => {
@@ -292,9 +293,32 @@ io.on('connection', (socket) => {
   })
 })
 
+function drawAndAdvance(room: Room, player: Player, timedOut: boolean): void {
+  room.revision += 1
+  if (room.deck.length > 0) {
+    const drawnTile = room.deck.pop()!
+    player.hand.push(drawnTile)
+    if (player.socketId) io.to(player.socketId).emit('game:drawn', drawnTile)
+    room.passCount = 0
+    room.message = `${player.name}${timedOut ? ' 時間到，自動' : ' '}摸了一張牌。`
+  } else {
+    room.passCount += 1
+    if (room.passCount >= room.players.length) {
+      room.finished = true
+      room.message = '牌堆已空且全體一輪無法出牌，平手。'
+    } else {
+      room.message = `${player.name}${timedOut ? ' 時間到' : ' 無法出牌'}，略過回合。`
+    }
+  }
+  if (!room.finished) advance(room)
+  else turnClock.stop(room)
+  publish(room)
+}
+
 function advance(room: Room): void {
   const currentIndex = room.players.findIndex((player) => player.id === room.currentPlayerId)
   room.currentPlayerId = room.players[(currentIndex + 1) % room.players.length].id
+  turnClock.start(room)
 }
 
 const port = Number(process.env.PORT ?? 3001)

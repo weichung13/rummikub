@@ -1,3 +1,4 @@
+import { TurnHourglass } from './components/TurnHourglass'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { colors, isValidMeld, meldValue, orderMeld, type GameView, type Meld, type Tile, type TileColor } from './game'
@@ -33,6 +34,7 @@ function App() {
   const [room, setRoom] = useState<GameView | null>(null)
   const [name, setName] = useState(() => readSeat()?.name ?? '')
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('room')?.toUpperCase().slice(0, 5) ?? '')
+  const [timerEnabled, setTimerEnabled] = useState(false)
   const [entryMode, setEntryMode] = useState<'create' | 'join' | null>(() => new URLSearchParams(location.search).has('room') ? 'join' : null)
   const leaveDialogRef = useRef<HTMLDialogElement>(null)
   const [playerKey, setPlayerKey] = useState(() => readSeat()?.playerId ?? '')
@@ -243,7 +245,7 @@ function App() {
     if (!connected || pending) return
     setPending(true)
     setError('')
-    socket.emit(action === 'create' ? 'room:create' : 'room:join', { name: cleanName, code: code.trim().toUpperCase() })
+    socket.emit(action === 'create' ? 'room:create' : 'room:join', { name: cleanName, code: code.trim().toUpperCase(), ...(action === 'create' ? { timerEnabled } : {}) })
   }
 
   const addToMeld = (index: number) => {
@@ -346,6 +348,7 @@ function App() {
               {entryMode === 'join' && <><label htmlFor="room-code">房間代碼</label><input id="room-code" autoFocus={!code} required autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={5} pattern="[A-Za-z2-9]{5}" placeholder="輸入 5 碼代碼" value={code} onChange={event => setCode(event.target.value.replace(/\s/g, '').toUpperCase())} /></>}
               <label htmlFor="player-name">你的暱稱</label>
               <input id="player-name" autoFocus={entryMode === 'create' || Boolean(code)} required maxLength={18} placeholder="輸入暱稱" value={name} onChange={event => setName(event.target.value)} />
+              {entryMode === 'create' && <label className="timer-setting"><input type="checkbox" checked={timerEnabled} onChange={event => setTimerEnabled(event.target.checked)} disabled={pending} /><span>啟用 3 分鐘沙漏<small>每回合 3 分鐘；時間到自動摸一張並換人，未提交排列撤銷。</small></span></label>}
               <button type="submit" className="primary-button create-button" disabled={!connected || pending || !name.trim() || (entryMode === 'join' && code.length !== 5)}>{pending ? '處理中…' : entryMode === 'join' ? '加入這個房間' : '確認建立房間'} <span>↗</span></button>
             </form>}
             {connectionError && <p className="error-text" role="status">{connectionError}</p>}
@@ -376,8 +379,8 @@ function App() {
       {connectionError && <div className="connection-banner" role="status">{connectionError}</div>}
       <section className="players-strip" aria-label="房間玩家">{room.players.map((player, index) => <div className={`player-seat ${room.currentPlayerId === player.id && room.started && !room.finished ? 'is-active' : ''}`} key={player.id}><span className={`seat-avatar avatar-${index % 6}`}>{player.name.slice(0, 1).toUpperCase()}</span><span className="seat-info"><strong>{player.name}{player.id === playerKey ? '（你）' : ''}</strong><small>{!player.connected ? '重新連線中' : player.isHost ? '房主' : '已加入'}</small></span>{room.started && <span className="tile-count">{player.id === playerKey ? sortedHand.length : player.count}<small>張</small></span>}</div>)}</section>
       <section className="table-area">
-        {!room.started ? <div className="waiting-state"><div className="wait-mark">✳</div><p className="eyebrow">ROOM {room.code}</p><h1>朋友，<em>就等你了。</em></h1><p className="waiting-copy">分享房間代碼，等大家用手機入座。至少 2 位玩家即可開始。</p><button className="code-share" onClick={copyRoomCode}><span>房間代碼</span><strong>{room.code}</strong><small>{linkCopied ? '已複製' : '複製邀請連結'}</small></button><div className="waiting-bottom"><span>{room.players.length} 位玩家已入座</span>{isHost ? <button className="primary-button" disabled={room.players.length < 2 || !connected || pending} onClick={() => { setPending(true); socket.emit('game:start') }}>開始遊戲 <span>↗</span></button> : <span>等待房主開始遊戲</span>}</div></div> : <>
-          <div className="table-heading"><div><p className="eyebrow">{room.finished ? 'GAME OVER' : isMyTurn ? 'YOUR TURN' : 'TABLE IN PLAY'}</p><h1>{room.finished ? winner ? `${winner.name} 獲勝` : '牌局結束' : isMyTurn ? '輪到你了' : turnPlayer ? `${turnPlayer.name} 的回合` : '拉密桌'}</h1></div><div className="draw-status" ref={drawPileRef} aria-label={`牌堆剩餘 ${room.drawCount} 張`}><span>DRAW PILE</span><div className="draw-pile-visual"><span className="draw-pile-card draw-pile-card-back" /><span className="draw-pile-card draw-pile-card-mid" /><span className="draw-pile-card draw-pile-card-front" /><strong>{room.drawCount}</strong></div><small>張</small></div></div>
+        {!room.started ? <div className="waiting-state"><div className="wait-mark">✳</div><p className="eyebrow">ROOM {room.code}</p><h1>朋友，<em>就等你了。</em></h1><p className="waiting-copy">分享房間代碼，等大家用手機入座。至少 2 位玩家即可開始。</p><button className="code-share" onClick={copyRoomCode}><span>房間代碼</span><strong>{room.code}</strong><small>{linkCopied ? '已複製' : '複製邀請連結'}</small></button><p>{room.timerEnabled ? '已啟用每回合 3 分鐘沙漏' : '不限回合時間'}</p><div className="waiting-bottom"><span>{room.players.length} 位玩家已入座</span>{isHost ? <button className="primary-button" disabled={room.players.length < 2 || !connected || pending} onClick={() => { setPending(true); socket.emit('game:start') }}>開始遊戲 <span>↗</span></button> : <span>等待房主開始遊戲</span>}</div></div> : <>
+          <div className="table-heading"><div><p className="eyebrow">{room.finished ? 'GAME OVER' : isMyTurn ? 'YOUR TURN' : 'TABLE IN PLAY'}</p><h1>{room.finished ? winner ? `${winner.name} 獲勝` : '牌局結束' : isMyTurn ? '輪到你了' : turnPlayer ? `${turnPlayer.name} 的回合` : '拉密桌'}</h1></div>{room.timerEnabled && !room.finished && room.turnDeadline !== null && <TurnHourglass key={room.turnDeadline} deadline={room.turnDeadline} serverNow={room.serverNow} />}<div className="draw-status" ref={drawPileRef} aria-label={`牌堆剩餘 ${room.drawCount} 張`}><span>DRAW PILE</span><div className="draw-pile-visual"><span className="draw-pile-card draw-pile-card-back" /><span className="draw-pile-card draw-pile-card-mid" /><span className="draw-pile-card draw-pile-card-front" /><strong>{room.drawCount}</strong></div><small>張</small></div></div>
           <div className="table-surface">{draft.length === 0 ? <div className="empty-table"><span>✳</span><p>桌面還沒有牌組</p><small>選好手牌，排出第一組牌</small></div> : draft.map((meld, meldIndex) => <div className={`meld-panel ${!isValidMeld(meld) ? 'meld-invalid' : ''}`} key={meldIndex}>
             <div className="meld" role="group" aria-label={`第 ${meldIndex + 1} 組牌`} tabIndex={0}>{meld.map((tile) => <TileButton key={tile.id} tile={tile} selected={selected.includes(tile.id)} fresh={!tableTileIds.has(tile.id)} highlighted={room.recentTableTileIds.includes(tile.id)} disabled={!canAct || (!opened && tableTileIds.has(tile.id))} onClick={() => toggleTile(tile.id)} />)}</div>
             {!isValidMeld(meld) && <small className="meld-error">{meld.length < 3 ? '至少需要 3 張牌' : '需為同色連號或不同色同數字'}</small>}
