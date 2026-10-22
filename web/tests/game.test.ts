@@ -59,3 +59,8 @@ function errorOf(result: ReturnType<typeof validateTurn>): string {
   assert.ok('error' in result)
   return result.error
 }
+
+test('timer duration accepts only supported numeric choices', () => {
+  for (const timerSeconds of [30, 60, 120, 180]) assert.ok(validEntry({ name: '甲', timerEnabled: true, timerSeconds }, false))
+  for (const timerSeconds of [0, -30, 31, 300, '30', null]) assert.equal(validEntry({ name: '甲', timerSeconds }, false), false)
+})

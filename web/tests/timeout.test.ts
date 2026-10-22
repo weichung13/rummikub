@@ -25,9 +25,10 @@ test('server timeout draws once, advances, survives reconnect and skips an empty
     }
     const [host, guest] = clients
     let next = update(host)
-    host.emit('room:create', { name: '甲', timerEnabled: true })
+    host.emit('room:create', { name: '甲', timerEnabled: true, timerSeconds: 30 })
     const lobby = await next
     assert.equal(lobby.turnDeadline, null)
+    assert.equal(lobby.timerSeconds, 30)
     next = update(guest)
     const hostJoined = update(host)
     guest.emit('room:join', { name: '乙', code: lobby.code })
@@ -36,22 +37,22 @@ test('server timeout draws once, advances, survives reconnect and skips an empty
     const guestStart = update(guest)
     host.emit('game:start')
     let view = await next; await guestStart
-    assert.equal(view.turnDeadline! - view.serverNow, 180000)
+    assert.equal(view.turnDeadline! - view.serverNow, 30000)
     const firstPlayer = view.currentPlayerId
     next = update(host)
     const guestTimeout = update(guest)
-    server.stdin.write('180000\n')
+    server.stdin.write('30000\n')
     ;[view] = await Promise.all([next, guestTimeout])
     assert.notEqual(view.currentPlayerId, firstPlayer)
     assert.equal(view.players.find(p => p.id === firstPlayer)?.count, 15)
     assert.equal(view.drawCount, 77)
     assert.match(view.message, /時間到/)
-    assert.equal(view.turnDeadline! - view.serverNow, 180000)
+    assert.equal(view.turnDeadline! - view.serverNow, 30000)
     // Each timeout after the deck empties counts as a pass and eventually ends the round.
     for (let i = 0; i < 80 && !view.finished; i++) {
       next = update(host)
       const other = update(guest)
-      server.stdin.write('180000\n')
+      server.stdin.write('30000\n')
       ;[view] = await Promise.all([next, other])
     }
     assert.equal(view.finished, true)
@@ -61,7 +62,8 @@ test('server timeout draws once, advances, survives reconnect and skips an empty
     host.emit('game:start')
     view = await next
     assert.equal(view.timerEnabled, true)
-    assert.equal(view.turnDeadline! - view.serverNow, 180000)
+    assert.equal(view.timerSeconds, 30)
+    assert.equal(view.turnDeadline! - view.serverNow, 30000)
     assert.equal(view.hand.length, 14)
   } finally { clients.forEach(client => client.disconnect()); server.kill() }
 })

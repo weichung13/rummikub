@@ -4,7 +4,7 @@ import { TurnClock, TURN_DURATION_MS, type TimedRoom } from '../server/turn-cloc
 
 test('timer expires at 180 seconds once and preserves real elapsed time', context => {
   context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 })
-  const room: TimedRoom = { timerEnabled: true, turnDeadline: null, started: true, finished: false }
+  const room: TimedRoom = { timerEnabled: true, timerSeconds: 180, turnDeadline: null, started: true, finished: false }
   let expired = 0
   const clock = new TurnClock(() => { expired += 1 })
   clock.start(room)
@@ -19,7 +19,7 @@ test('timer expires at 180 seconds once and preserves real elapsed time', contex
 
 test('new turns cancel old deadlines; stopping, untimed and ended games do not expire', context => {
   context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 })
-  const room: TimedRoom = { timerEnabled: true, turnDeadline: null, started: true, finished: false }
+  const room: TimedRoom = { timerEnabled: true, timerSeconds: 180, turnDeadline: null, started: true, finished: false }
   let expired = 0
   const clock = new TurnClock(() => { expired += 1 })
   clock.start(room)
@@ -41,7 +41,7 @@ test('new turns cancel old deadlines; stopping, untimed and ended games do not e
 
 test('late requests enforce timeout before a delayed timer callback', context => {
   context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 })
-  const room: TimedRoom = { timerEnabled: true, turnDeadline: null, started: true, finished: false }
+  const room: TimedRoom = { timerEnabled: true, timerSeconds: 180, turnDeadline: null, started: true, finished: false }
   let expired = 0
   const clock = new TurnClock(() => { expired += 1; clock.start(room) })
   clock.start(room)
@@ -53,3 +53,18 @@ test('late requests enforce timeout before a delayed timer callback', context =>
   assert.equal(expired, 1)
   clock.stop(room)
 })
+
+for (const timerSeconds of [30, 60, 120, 180]) {
+  test(`selected ${timerSeconds}s duration expires once at its deadline`, context => {
+    context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 })
+    const room: TimedRoom = { timerEnabled: true, timerSeconds, turnDeadline: null, started: true, finished: false }
+    let expired = 0
+    const clock = new TurnClock(() => { expired += 1 })
+    clock.start(room)
+    assert.equal(room.turnDeadline, 1000 + timerSeconds * 1000)
+    context.mock.timers.tick(timerSeconds * 1000 - 1)
+    assert.equal(expired, 0)
+    context.mock.timers.tick(1)
+    assert.equal(expired, 1)
+  })
+}

@@ -1,3 +1,7 @@
+export const TIMER_SECONDS = [30, 60, 120, 180] as const
+export type TimerSeconds = typeof TIMER_SECONDS[number]
+export function timerLabel(seconds: number): string { return seconds < 60 ? `${seconds} 秒` : `${seconds / 60} 分鐘` }
+
 export type TileColor = 'red' | 'blue' | 'yellow' | 'black'
 
 export type Tile = {
@@ -18,6 +22,7 @@ export type PlayerView = {
 
 export type GameView = {
   timerEnabled: boolean
+  timerSeconds: TimerSeconds
   turnDeadline: number | null
   serverNow: number
   revision: number

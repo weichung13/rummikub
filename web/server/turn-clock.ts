@@ -1,5 +1,5 @@
 export const TURN_DURATION_MS = 180_000
-export type TimedRoom = { timerEnabled: boolean; turnDeadline: number | null; started: boolean; finished: boolean }
+export type TimedRoom = { timerEnabled: boolean; timerSeconds: number; turnDeadline: number | null; started: boolean; finished: boolean }
 
 /** One deadline per room. Reconnection/presence updates never restart this clock. */
 export class TurnClock<T extends TimedRoom> {
@@ -17,7 +17,8 @@ export class TurnClock<T extends TimedRoom> {
   start(room: T): void {
     this.stop(room)
     if (!room.timerEnabled || !room.started || room.finished) return
-    room.turnDeadline = Date.now() + TURN_DURATION_MS
+    const duration = room.timerSeconds * 1000
+    room.turnDeadline = Date.now() + duration
     const deadline = room.turnDeadline
     const check = () => {
       if (room.turnDeadline !== deadline) return
@@ -26,7 +27,7 @@ export class TurnClock<T extends TimedRoom> {
         this.timers.set(room, setTimeout(check, Math.max(1, deadline - Date.now())))
       }
     }
-    this.timers.set(room, setTimeout(check, TURN_DURATION_MS))
+    this.timers.set(room, setTimeout(check, duration))
   }
 
   expireIfDue(room: T): boolean {

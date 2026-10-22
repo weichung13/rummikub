@@ -9,7 +9,7 @@
 | `web/src/game.ts` | 共享型別、牌組合法性／排序／點數、牌堆建立 |
 | `web/server/index.ts` | Express 靜態網站、Socket 事件、記憶體房間、玩家身分、狀態推進與個別廣播 |
 | `web/server/validation.ts` | 未知網路輸入的形狀與大小驗證 |
-| `web/server/turn-clock.ts` | 每房單一 180 秒期限、取消與過期檢查；期限到時呼叫既有摸牌流程 |
+| `web/server/turn-clock.ts` | 每房依所選時間設定單一期限、取消與過期檢查；期限到時呼叫既有摸牌流程 |
 | `web/src/components/TurnHourglass.tsx` | 獨立沙漏元件，以伺服器時間錨點與本機單調時鐘呈現倒數，附獨立 CSS |
 | `web/server/turn.ts` | 純函式出牌驗證：牌的來源、保留、重複、首次門檻 |
 | `web/tests/game.test.ts` | 規則及輸入驗證的自動化測試 |
@@ -28,7 +28,7 @@
 
 | 方向／事件 | 資料與效果 |
 | --- | --- |
-| 客戶端 `room:create` | `{ name, timerEnabled? }`；建立房間與私密座位，沙漏預設關閉 |
+| 客戶端 `room:create` | `{ name, timerEnabled?, timerSeconds? }`；建立房間與私密座位，沙漏預設關閉，時間僅接受 30／60／120／180 秒，省略時為 180 秒 |
 | 客戶端 `room:join` | `{ name, code, token?, reconnect? }`；新加入或恢復座位 |
 | 客戶端 `room:leave` | 無參數；移除座位、必要時交接或結束牌局 |
 | 客戶端 `game:start` | 無參數；只有房主可開始或在結束後重開，需至少兩人且全部在線；重建牌局並遞增 revision |
@@ -69,8 +69,8 @@
 
 ## 沙漏計時協定
 
-`GameView` 新增 `timerEnabled`、`turnDeadline`（伺服器毫秒期限或 null）與 `serverNow`。不每秒廣播；前端以收到的伺服器時間加上 `performance.now()` 經過時間估算。每次房間更新重新校準，等待與結束時不顯示沙漏。
+`GameView` 新增 `timerEnabled`、`timerSeconds`（每回合秒數）、`turnDeadline`（伺服器毫秒期限或 null）與 `serverNow`。不每秒廣播；前端以收到的伺服器時間加上 `performance.now()` 經過時間估算。每次房間更新重新校準，等待與結束時不顯示沙漏。
 
 `TurnClock` 統一管理每房計時器；回合推進呼叫 start，結束與刪除呼叫 stop。出牌／摸牌 handler 在處理前呼叫 expireIfDue，與排程到期共同走 drawAndAdvance，避免兩套摸牌邏輯。重連不呼叫 start；沙漏設定與 deadline 不因連線狀態廣播而變動。
 
-計時單元測試採 Node mock timers；Socket 到期測試透過獨立子程序 preload 僅加速 180 秒遊戲計時，網路心跳保留真實時間。正式伺服器沒有測試加速設定或時間調整 API。前後端應一同部署；既有記憶體房間會因伺服器重啟清除。
+計時單元測試採 Node mock timers；Socket 到期測試透過獨立子程序 preload 僅加速四種支援時長的遊戲計時，網路心跳保留真實時間。正式伺服器沒有測試加速設定或時間調整 API。前後端應一同部署；既有記憶體房間會因伺服器重啟清除。

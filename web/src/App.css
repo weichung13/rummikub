@@ -189,3 +189,7 @@
 .rematch-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
 .game-result .rematch-actions button { margin: 0; }
 .game-result > p { line-height: 1.6; }
+
+.timer-options { display: grid; gap: 12px; }
+.timer-duration { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.timer-duration select { padding: 10px 12px; border-radius: 8px; font: inherit; min-width: 110px; }

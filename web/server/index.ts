@@ -6,7 +6,7 @@ import express from 'express'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { Server } from 'socket.io'
-import { createDeck, orderMeld, type GameView, type Meld, type PlayerView, type Tile } from '../src/game.js'
+import { createDeck, orderMeld, type TimerSeconds, type GameView, type Meld, type PlayerView, type Tile } from '../src/game.js'
 
 type Player = {
   id: string
@@ -18,6 +18,7 @@ type Player = {
 
 type Room = {
   timerEnabled: boolean
+  timerSeconds: TimerSeconds
   turnDeadline: number | null
   code: string
   revision: number
@@ -73,6 +74,7 @@ function viewFor(room: Room, playerId: string): GameView {
   }))
   return {
     timerEnabled: room.timerEnabled,
+    timerSeconds: room.timerSeconds,
     turnDeadline: room.turnDeadline,
     serverNow: Date.now(),
     code: room.code,
@@ -120,6 +122,7 @@ io.on('connection', (socket) => {
     const room: Room = {
       code,
       timerEnabled: input.timerEnabled ?? false,
+      timerSeconds: input.timerSeconds ?? 180,
       turnDeadline: null,
       revision: 0,
       hostId: player.id,

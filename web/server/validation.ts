@@ -1,4 +1,5 @@
-type Entry = { timerEnabled?: boolean; name: string; code?: string; token?: string; reconnect?: boolean }
+import { TIMER_SECONDS, type TimerSeconds } from '../src/game.js'
+type Entry = { timerEnabled?: boolean; timerSeconds?: TimerSeconds; name: string; code?: string; token?: string; reconnect?: boolean }
 export function validEntry(value: unknown, joining: boolean): value is Entry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const entry = value as Record<string, unknown>
@@ -6,6 +7,7 @@ export function validEntry(value: unknown, joining: boolean): value is Entry {
     && (!joining || (typeof entry.code === 'string' && /^[A-Z2-9]{5}$/i.test(entry.code)))
     && (entry.token === undefined || (typeof entry.token === 'string' && /^[a-f0-9]{64}$/.test(entry.token)))
     && (entry.timerEnabled === undefined || typeof entry.timerEnabled === 'boolean')
+    && (entry.timerSeconds === undefined || TIMER_SECONDS.some(seconds => seconds === entry.timerSeconds))
     && (entry.reconnect === undefined || typeof entry.reconnect === 'boolean')
 }
 export function validSubmission(value: unknown): value is { id: string }[][] {

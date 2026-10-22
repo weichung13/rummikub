@@ -6,7 +6,7 @@ const realClearTimeout = globalThis.clearTimeout
 const gameTimers = new Map<ReturnType<typeof setTimeout>, { at: number; run: () => void }>()
 globalThis.setTimeout = ((callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
   const handle = realSetTimeout(callback, delay, ...args)
-  if (delay === 180000) gameTimers.set(handle, { at: Date.now() + delay, run: () => callback(...args) })
+  if ([30000, 60000, 120000, 180000].includes(Number(delay))) gameTimers.set(handle, { at: Date.now() + Number(delay), run: () => callback(...args) })
   return handle
 }) as typeof setTimeout
 globalThis.clearTimeout = ((handle: ReturnType<typeof setTimeout>) => {
